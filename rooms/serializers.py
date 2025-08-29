@@ -1,37 +1,48 @@
 from rest_framework import serializers
-from .models import Room,RoomMember,RoomInvitation
+from .models import Room, RoomInvitation
+from django.core.mail import send_mail
+from django.contrib.auth import get_user_model
+from django.conf import settings
+
+User = get_user_model()
 
 class RoomSerializer(serializers.ModelSerializer):
+    emails = serializers.ListField(
+        child=serializers.EmailField(),
+        write_only=True,
+        required=False
+    )
+
     class Meta:
         model = Room
-        fields = ['id', 'name', 'description', 'created_by', 'created_at', 'is_private']
-        read_only_fields = ['id', 'created_by', 'created_at']
+        fields = ['id', 'name', 'description', 'created_at', 'emails']
 
-class RommMemberSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Room
-        fields = ['id', 'room', 'user', 'role', 'joined_at']
-        read_only_fields = ['id', 'joined_at']
+    def create(self, validated_data):
+        emails = validated_data.pop("emails", [])
+        request = self.context.get("request")
 
-class RoomMemberSerializer(serializers.ModelSerializer):
-    user_name = serializers.CharField(source='user.name', read_only=True)
-    user_email = serializers.CharField(source='user.email', read_only=True)
-    
-    class Meta:
-        model = RoomMember
-        fields = ['id', 'user', 'user_name', 'user_email', 'role', 'joined_at']
+        room = Room.objects.create(
+            created_by=request.user,
+            **validated_data
+        )
+
+        # Send invitation emails
+        for email in emails:
+            invite_link = f"http://localhost:5173/signup?email={email}&room_id={room.id}"
+            send_mail(
+                subject=f"Invitation to join room {room.name}",
+                message=f"You are invited to join {room.name}. Click here: {invite_link}",
+                from_email=settings.EMAIL_HOST_USER,
+                recipient_list=[email],
+                fail_silently=True,
+            )
+
+        return room
 
 class InvitationSerializer(serializers.ModelSerializer):
     room_name = serializers.CharField(source='room.name', read_only=True)
-    inviter_name = serializers.CharField(source='invited_by.name', read_only=True)
+    inviter_name = serializers.CharField(source='invited_by.username', read_only=True)
     
     class Meta:
         model = RoomInvitation
-        fields = ['email', 'room_name', 'inviter_name', 'status', 'created_at']
-
-class InviteEmailsSerializer(serializers.Serializer):
-    emails = serializers.ListField(child=serializers.EmailField())
-
-class AcceptInvitationSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=100, required=False)
-    password = serializers.CharField(write_only=True, required=False)
+        fields = ['id', 'room_name', 'inviter_name', 'email', 'status', 'created_at']

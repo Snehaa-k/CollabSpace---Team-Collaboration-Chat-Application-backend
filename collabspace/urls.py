@@ -16,9 +16,50 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path,include
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+
+@csrf_exempt
+def create_room_endpoint(request):
+    print(f"Request method: {request.method}")
+    print(f"Request path: {request.path}")
+    if request.method == 'POST':
+        try:
+            from rooms.models import Room, RoomInvitation
+            from rooms.serializers import RoomSerializer
+            from django.contrib.auth import get_user_model
+            
+            User = get_user_model()
+            data = json.loads(request.body)
+            
+            # Create room
+            room_data = {'name': data.get('name'), 'description': data.get('description')}
+            serializer = RoomSerializer(data=room_data)
+            
+            if serializer.is_valid():
+                room = serializer.save(created_by=request.user if request.user.is_authenticated else None)
+                
+                # Handle email invitations
+                emails = data.get('emails', [])
+                for email in emails:
+                    RoomInvitation.objects.create(
+                        room=room,
+                        email=email,
+                        invited_by=request.user if request.user.is_authenticated else None
+                    )
+                
+                return JsonResponse(RoomSerializer(room).data)
+            else:
+                return JsonResponse({"errors": serializer.errors}, status=400)
+                
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+    return JsonResponse({"error": "Method not allowed"}, status=405)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('accounts.urls')),
     path('api/', include('rooms.urls')),
+    path('api/rooms/create/', create_room_endpoint, name='create-room'),
 ]
