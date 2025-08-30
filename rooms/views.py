@@ -5,13 +5,21 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth import get_user_model
 from .models import Room, RoomInvitation, RoomMember
 from .serializers import RoomSerializer, InvitationSerializer
+from django.db import models
 
 User = get_user_model()
 
 class RoomViewSet(viewsets.ModelViewSet):
-    queryset = Room.objects.all()
     serializer_class = RoomSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        # Rooms where the user is the creator or a member
+        return Room.objects.filter(
+            models.Q(created_by=user) | 
+            models.Q(roommember__user=user)
+        ).distinct()
 
 class InvitationDetailView(APIView):
     permission_classes = [AllowAny]

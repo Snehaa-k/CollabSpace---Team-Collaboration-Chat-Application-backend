@@ -17,10 +17,33 @@ class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
+        from rooms.models import RoomInvitation
+        
+        email = request.data.get('email')
+        
+        # Check if user already exists
+        if User.objects.filter(email=email).exists():
+            return Response({
+                "message": "An account with this email already exists. Please login."
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Create new user
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
-            return Response({"message": "User registered successfully"}, status=status.HTTP_201_CREATED)
+            user = serializer.save()
+            
+            # Check for pending invitations
+            pending_invitations = RoomInvitation.objects.filter(
+                email=email, 
+                status='pending'
+            )
+            
+            response_data = {"message": "User registered successfully"}
+            if pending_invitations.exists():
+                response_data["pending_invitations"] = pending_invitations.count()
+                response_data["message"] = f"User registered successfully! You have {pending_invitations.count()} pending room invitation(s)."
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -33,15 +56,30 @@ class LoginView(APIView):
         user = authenticate(request, email=email, password=password)
         
         if user:
+            from rooms.models import RoomInvitation
+            
             refresh = RefreshToken.for_user(user)
-            response = Response({
+            
+            # Check for pending invitations
+            pending_invitations = RoomInvitation.objects.filter(
+                email=user.email, 
+                status='pending'
+            )
+            
+            response_data = {
                 "user": {
                     "id": user.id,
                     "name": user.username,
                     "email": user.email,
                 },
                 "message": "Login successful"
-            }, status=status.HTTP_200_OK)
+            }
+            
+            if pending_invitations.exists():
+                response_data["pending_invitations"] = pending_invitations.count()
+                response_data["message"] = f"Login successful! You have {pending_invitations.count()} pending room invitation(s)."
+            
+            response = Response(response_data, status=status.HTTP_200_OK)
             
             # Return tokens in response for localStorage
             access_token = str(refresh.access_token)

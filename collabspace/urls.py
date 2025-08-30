@@ -40,7 +40,7 @@ def create_room_endpoint(request):
             if serializer.is_valid():
                 room = serializer.save(created_by=request.user if request.user.is_authenticated else None)
                 
-                # Handle email invitations
+                # Handle email invitations - only store invitations, don't create users
                 emails = data.get('emails', [])
                 for email in emails:
                     RoomInvitation.objects.create(
