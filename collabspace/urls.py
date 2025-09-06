@@ -61,5 +61,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('accounts.urls')),
     path('api/', include('rooms.urls')),
+    path('api/rooms/', include('chat.urls')),
     path('api/rooms/create/', create_room_endpoint, name='create-room'),
 ]

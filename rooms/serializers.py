@@ -9,10 +9,19 @@ User = get_user_model()
 class RoomMemberSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", read_only=True)
     id = serializers.IntegerField(source="user.id", read_only=True)
+    invite_email = serializers.SerializerMethodField()
 
     class Meta:
         model = RoomMember
-        fields = ["id", "email", "joined_at"]
+        fields = ["id", "email", "joined_at", "invite_email"]
+
+    def get_invite_email(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            user_email = request.user.email
+            invitation = RoomInvitation.objects.filter(room=obj.room, email=user_email).first()
+            return invitation.email if invitation else None
+        return None
 
 
 class RoomSerializer(serializers.ModelSerializer):
@@ -45,26 +54,31 @@ class RoomSerializer(serializers.ModelSerializer):
             **validated_data
         )
 
-        # Add creator as a member
         RoomMember.objects.create(room=room, user=request.user)
-
         # Handle invitations
         for email in emails:
             try:
                 user = User.objects.get(email=email)
+                # If user exists, add them directly
                 RoomMember.objects.get_or_create(room=room, user=user)
             except User.DoesNotExist:
-                # Send invitation if user doesn't exist
-                invite_link = f"http://localhost:5173/signup?email={email}&room_id={room.id}"
+                RoomInvitation.objects.create(
+                    room=room,
+                    email=email,
+                    invited_by=request.user
+                )
+                signup_link = f"{settings.FRONTEND_URL}"
                 send_mail(
                     subject=f"Invitation to join room {room.name}",
-                    message=f"You are invited to join {room.name}. Click here: {invite_link}",
+                    message=f"You are invited to join {room.name}. "
+                            f"Please register here: {signup_link}",
                     from_email=settings.EMAIL_HOST_USER,
                     recipient_list=[email],
                     fail_silently=True,
                 )
 
         return room
+
 
 class InvitationSerializer(serializers.ModelSerializer):
     room_name = serializers.CharField(source='room.name', read_only=True)

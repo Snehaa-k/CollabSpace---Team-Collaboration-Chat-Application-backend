@@ -25,6 +25,5 @@ class RoomInvitation(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE)
     email = models.EmailField()
     invited_by = models.ForeignKey(User, on_delete=models.CASCADE)
-    token = models.UUIDField(default=uuid.uuid4, unique=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
