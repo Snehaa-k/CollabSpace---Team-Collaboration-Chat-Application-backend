@@ -24,20 +24,40 @@ class RoomViewSet(viewsets.ModelViewSet):
         ).distinct()
     
     def update(self, request, *args, **kwargs):
+        print(f"Update request data: {request.data}")
         room = self.get_object()
+        print(f"Room owner: {room.created_by}, Request user: {request.user}")
         # Only room owner can update
         if room.created_by != request.user:
             return Response({'error': 'Only room owner can update'}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
+        response = super().update(request, *args, **kwargs)
+        print(f"Update response: {response.data}")
+        return response
+    
+    def partial_update(self, request, *args, **kwargs):
+        print(f"Partial update request data: {request.data}")
+        room = self.get_object()
+        print(f"Room owner: {room.created_by}, Request user: {request.user}")
+        # Only room owner can update
+        if room.created_by != request.user:
+            return Response({'error': 'Only room owner can update'}, status=status.HTTP_403_FORBIDDEN)
+        response = super().partial_update(request, *args, **kwargs)
+        print(f"Partial update response: {response.data}")
+        return response
     
     @action(detail=True, methods=['post'])
     def invite(self, request, pk=None):
+        print(f"Invite request data: {request.data}")
         room = self.get_object()
+        print(f"Room: {room.name}, Owner: {room.created_by}, Request user: {request.user}")
+        
         if room.created_by != request.user:
             return Response({'error': 'Only room owner can invite members'}, status=status.HTTP_403_FORBIDDEN)
         
         emails = request.data.get('emails', [])
+        print(f"Emails to invite: {emails}")
         invited_count = 0
+        existing_count = 0
         
         for email in emails:
             if email.strip():
@@ -48,10 +68,17 @@ class RoomViewSet(viewsets.ModelViewSet):
                 )
                 if created:
                     invited_count += 1
+                    print(f"Created invitation for {email}")
+                else:
+                    existing_count += 1
+                    print(f"Invitation already exists for {email}")
         
+        print(f"Invited: {invited_count}, Already existed: {existing_count}")
         return Response({
-            'message': f'{invited_count} invitations sent',
-            'room_id': room.id
+            'message': f'{invited_count} new invitations sent, {existing_count} already existed',
+            'room_id': room.id,
+            'invited_count': invited_count,
+            'existing_count': existing_count
         })
 
 
